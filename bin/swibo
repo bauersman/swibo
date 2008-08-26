@@ -1,0 +1,5 @@
+#!/usr/bin/env ruby
+
+basedir = File.expand_path(File.dirname(__FILE__)+"/..")
+@rackfile = basedir+"/lib/swibo.ru"
+system "thin", "-p4012", "--rackup", @rackfile, "start"

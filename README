@@ -1,1 +1,17 @@
 swibo - shared whiteboard
+
+not much to see yet, basic communication is working
+
+start server:
+
+  bin/swibo
+
+
+start one or more listeners:
+
+  curl localhost:4012/listen
+
+
+send messages:
+
+  curl localhost:4012/send/my_message
