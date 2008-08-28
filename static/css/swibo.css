@@ -1,0 +1,43 @@
+a.test {
+  font-weight: bold;
+}
+
+div#header {
+  padding: 3px;
+  padding-left: 10px;
+  background: #faa;
+  border: 2px solid red;
+  height: 5em;
+}
+
+div#wrapper {
+  background: #ccc;
+  padding: 10px;
+  border: 2px solid black;
+  height: 70%;
+}
+
+#canvas {
+  background: #fff;
+  padding-top: 2%;
+  padding-left: 2%;
+  border: 2px solid #888;
+  height: 80%;
+  width: 98%;
+}
+
+div#input {
+  padding-top: 4px;
+  background: #fff;
+  padding-left: 2%;
+  border: 2px solid #888;
+  height: 8%;
+  width: 98%;
+}
+
+div#footer {
+  padding: 3px;
+  padding-left: 10px;
+  border: 2px solid blue;
+  height 5em;
+}

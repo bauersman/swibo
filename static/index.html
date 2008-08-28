@@ -1,0 +1,24 @@
+<html>
+  <head>
+    <link type="text/css" href="/css/swibo.css" rel="stylesheet"/>
+    <script type="text/javascript" src="/js/jquery-1.2.6.js"></script>
+    <script type="text/javascript" src="/js/swibo.js"></script>
+  </head>
+  <body>
+    <div id="header">
+      <h1>SWIBO</h1>
+    </div>
+    <div id="wrapper">
+      <pre id="canvas"></pre>
+      <div id="input">
+        <form id="form" method="GET" onsubmit="send_data(event)">
+          <input type="text" name="t" id="t"/>
+          <input type="submit" value="send"/>
+        </form>
+      </div>
+    </div>
+    <div id="footer">
+      <a href="http://jquery.com/">jQuery</a>
+    </div>
+  </body>
+</html>
