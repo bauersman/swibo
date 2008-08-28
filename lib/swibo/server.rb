@@ -1,3 +1,5 @@
+require 'date'
+
 module Swibo
   AsyncResponse = [-1, {}, []].freeze
 
@@ -72,6 +74,12 @@ class ChunkedPingBody < ChunkedBody
   end
 end
 
+class DocManager
+  def initialize
+    @doclist = Array.new
+  end
+end
+
 class ListenerList
   def initialize
     @listeners = Array.new
@@ -83,6 +91,7 @@ class ListenerList
   
   def add(obj)
     @listeners << obj
+    STDERR.puts "[Listener] adding listener, list has now #{@listeners.size} bodies"
   end
 
   def <<(obj)
@@ -92,6 +101,7 @@ class ListenerList
   def remove(obj)
     obj.finish
     cleanup
+    STDERR.puts "[Listener] removing listener, list has now #{@listeners.size} bodies"
   end
 
   private
@@ -102,69 +112,112 @@ end
 
 class Server
   def initialize
-    @ping_list = Array.new
-    @timer_started = false
-    @current_env
-    @listeners = ListenerList.new 
+    @listeners = ListenerList.new
+    @approot = File.expand_path(File.dirname(__FILE__)+"/../..")
   end
 
   def call(env)
-    @current_env = env
-    case env['PATH_INFO']
-    when %r(^/ping)
-      start_timer
-      body = ChunkedPingBody.new(5)
-
-      EventMachine::next_tick do
-        env['async.callback'].call [200, chunked_header("text/html"), body]
+    @env = env
+      case env['PATH_INFO']
+      when %r(^/$)
+        response = redirect_to("/index.html")
+      when %r(^/doc/?$)
+        response = doclist
+      when %r(^/static/(.*))
+        response = static(path)
+      when %r(^/listen)
+        response = listen
+      when %r(^/send/?$)
+        env["QUERY_STRING"] =~ /t=(.*)/
+        response = send($1+"\n")
+      else
+        response = static(env["PATH_INFO"])
       end
-
-      body.callback do
-        STDERR.puts "callback: #{env['REMOTE_ADDR']}"
-        debug_callback(body, env)
-      end
-
-      body.errback do
-        STDERR.puts "errback: #{env['REMOTE_ADDR']}"
-        debug_callback(body, env)
-      end
-    
-      add_to_timer(body)
-    when %r(^/listen)
-      body = ChunkedBody.new
-
-      EventMachine::next_tick do
-        env['async.callback'].call [200, chunked_header("text/plain"), body]
-      end
-
-      body.callback do
-        @listeners.remove body
-      end
-
-      body.errback do
-        @listeners.remove body
-      end
-      
-      @listeners << body
-    when %r(^/send/(.*))
-      msg = $1+"\n"
-      body = "Message Sent: #{msg.inspect}\n"
-      EventMachine::next_tick do
-        @listeners.send msg
-        env['async.callback'].call [200, default_header(body.length), body]
-      end
-    else
-      EventMachine::next_tick do
-        body = "Not found: #{env['PATH_INFO']}\n"
-        env['async.callback'].call [404, default_header(body.size), body]
-      end
-    end
-    return Swibo::AsyncResponse
-  ensure
-    @current_env = nil
+    return response
   end
 
   private
+
+  def redirect_to(path)
+    header = {
+      "Location" => path
+    }
+    [301, header, []]
+  end
+
+  def notfound(path)
+    body = "Not found: #{path}\n"
+    [404, default_header(body.size), [body]]
+  end
+
+  def static(path)
+    static_dir = @approot+"/static"
+    
+    if(File::exists? static_dir+path)
+      readfile(static_dir+path)
+    else
+      notfound(path)
+    end
+  end
+
+  def readfile(path)
+    stat = File::stat(path)
+    header = {
+      "Date" => Time.now.to_s,
+      "Content-Type" => content_type_from_filename(path),
+      "Last-Modified" => stat.mtime.to_s
+    }
+
+    mod_since = @env["HTTP_IF_MODIFIED_SINCE"]
+    if false and mod_since and stat.mtime.to_datetime <= DateTime.parse(mod_since)
+      result = [304, header, []]
+    else
+      header.merge!({
+        "Content-Length" => stat.size.to_s
+      })
+      f = open(path, "r")
+      result = [200, header, [f.read]]
+      f.close
+    end
+    return result
+  end
+
+  def content_type_from_filename(fname)
+    md = fname.match(/.+\.(.+)$/)
+    return "application/octet-stream" unless md
+    return case md
+    when "html"
+      "text/html"
+    when "css"
+      "text/css"
+    when "js"
+      "text/javascript"
+    end
+  end
+
+  def listen
+    body = ChunkedBody.new
+    body.callback do
+      STDERR.puts "callback"
+      @listeners.remove body
+    end
+    body.errback do
+      STDERR.puts "errback"
+      @listeners.remove body
+    end
+    @listeners << body
+    EventMachine::next_tick do
+      @env['async.callback'].call [200, chunked_header("text/plain"), body]
+    end
+    return Swibo::AsyncResponse
+  end
+
+  def send(msg)
+    @listeners.send msg
+    body = "Message Sent: #{msg.inspect}\n"
+    [200, default_header(body.length), body]
+  end
+
   def chunked_header(ctype)
     {"Content-Type"=>ctype, "Transfer-Encoding"=>"chunked"}
   end
@@ -179,23 +232,6 @@ class Server
     STDERR.puts body.inspect
     STDERR.puts env.inspect
     STDERR.puts "--------------------------------------------------------" 
-  end
-
-  def add_to_timer(body)
-    @ping_list << body
-    STDERR.puts "client #{body.object_id} from #{@current_env['REMOTE_ADDR']} connected, ping list has #{@ping_list.length} clients"
-  end
-
-  def start_timer
-    return if @timer_started
-    STDERR.puts "starting timer"
-    EventMachine::add_periodic_timer(1) do
-      @ping_list = @ping_list.reject {|body| body.finished?}
-      @ping_list.each do |body|
-        body.send_chunk_or_succeed
-      end
-    end
-    @timer_started = true
   end
 end
 end
