@@ -5,9 +5,21 @@ var check_id = null;
 var state = 0;
 var cached_text = "";
 var cached_index = 0;
+var objectlist = {};
+var obj_index = 0;
+var moving = false;
+var next_update = false;
 
 function do_stuff() {
   setup_listener();
+  setInterval(send_pending, 500);
+}
+
+function send_pending() {
+  if(next_update) {
+    send_data(next_update);
+    next_update = false;
+  }
 }
 
 function setup_listener() {
@@ -37,13 +49,25 @@ function setup_listener() {
   check_id = setInterval(check_listener, 100);
 }
 
-function send_data(event) {
-  event.preventDefault();
+function send_data(data) {
   $.ajax({
     type: "GET",
-    url: "/send?t="+$("#t").val()
+    url: "/send?t="+JSON.stringify(data)
   });
-  $("#t").val("");
+}
+
+function new_chatbox() {
+  data = {type: "chatbox", top: 10, left: 10};
+  //create_object(data);
+  send_data({action: "create", data: {type: "chatbox", top: 10, left: 10}});
+}
+
+function chatbox_send(ev, obj) {
+  ev.preventDefault();
+  id = $(obj).parent().parent()[0].id;
+  input = $(obj).children("input[name=t]");
+  send_data({action: "update", id: id, data: {text: input.val()}});
+  input.val("");
 }
 
 function check_listener() {
@@ -53,7 +77,42 @@ function check_listener() {
     chunk = cached_text.substr(cached_index);
     cached_index = cached_text.length;
 
-    $("pre").append(unescape(chunk));
+    obj = JSON.parse(unescape(chunk));
+
+    if(obj.action == "update") {
+      if(obj.data.text) {
+        $("#"+obj.id+" pre").append(obj.data.text+"\n");
+      }
+      if(!moving && (obj.data.top)) {
+        o = $("#"+obj.id);
+        o[0].style.top = obj.data.top;
+        o[0].style.left = obj.data.left;
+      }
+    } else if(obj.action == "create") {
+      o = create_object(obj.data);
+      o.bind("mousemove", function(e){
+        if(moving) {
+          //$(this).find("pre").text("pos: top: "+this.style.top+" left: "+this.style.left);
+          id = this.id;
+          next_update = {action: "update", id: id, data: {top: this.style.top, left: this.style.left}};
+        }
+      });
+
+      o.bind("mousedown", function(e){moving=true});
+      o.bind("mouseup", function(e){moving=false});
+    }
   }
   $("div#footer").text("check_state: "+state);
+}
+
+function create_object(obj) {
+  o = $("#store ."+obj.type).clone();
+  o[0].style.left = obj.left;
+  o[0].style.top = obj.top;
+  obj_index += 1;
+  o[0].id = "obj_"+obj_index;
+  
+  $("#canvas").append(o);
+  o.draggable();
+  return o;
 }

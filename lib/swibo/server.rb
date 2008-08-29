@@ -1,4 +1,5 @@
 require 'date'
+require 'cgi'
 
 module Swibo
   AsyncResponse = [-1, {}, []].freeze
@@ -32,13 +33,15 @@ class DeferrableBody
 end
 
 class ChunkedBody < DeferrableBody
+  attr_accessor :decode_json
+
   def send(msg)
     return if finished?
     call [chunk(msg)]
   end
 
   def <<(msg)
-    send msg
+    send decode_json ? CGI.unescape(msg) : msg
   end
 
   def finish
@@ -54,23 +57,6 @@ class ChunkedBody < DeferrableBody
 
   def last_chunk
     "0\r\n\r\n"
-  end
-end
-
-class ChunkedPingBody < ChunkedBody
-  attr_reader :ping_max
-
-  def initialize(ping_max)
-    @ping_count = 0
-    @ping_max = ping_max
-    super()
-  end
-
-  def send_chunk_or_succeed
-    call [chunk("Test #{@ping_count}\n")]
-    if((@ping_count += 1) > ping_max)
-      finish
-    end
   end
 end
 
@@ -197,6 +183,9 @@ class Server
 
   def listen
     body = ChunkedBody.new
+    if @env["QUERY_STRING"] =~ /decode/
+      body.decode_json = true;
+    end
     body.callback do
       STDERR.puts "callback"
       @listeners.remove body
